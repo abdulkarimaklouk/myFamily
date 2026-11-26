@@ -75,15 +75,16 @@ Codebase health inspection was conducted in `apps/api` (the npm package context)
 | `nodemon`           | 3.0.2       | 3.1.14      | 3.1.14   | `apps/api/node_modules` |
 | `validator`         | 13.11.0     | 13.15.35    | 13.15.35 | `apps/api/node_modules` |
 
-### 3.3 npm test
+### 3.3 API Smoke Test
 
-- **Result:** `Missing script: "test"`
-- **Configuration Status:** `apps/api/package.json` does not configure a `"test"` script, so running `npm test` returns `Missing script: "test"`.
-- **Standalone Smoke Test:** A lightweight, standalone API smoke test is available at `apps/api/smoke-test.js` and runs using:
-  ```bash
-  node --test apps/api/smoke-test.js
-  ```
-  The latest manually verified execution passed all 7 tests (7/7 PASS). This distinction represents an informational configuration detail rather than an unresolved application issue or an absence of automated testing.
+- **Test Script:** Configured in `apps/api/package.json`.
+- **Script Command:** `"test": "node --test smoke-test.js"`
+- **Execution:** Run `npm test` from the `apps/api` directory.
+- **Test File:** `apps/api/smoke-test.js`
+- **Latest Result:** 7 tests passed (7/7 PASS).
+
+The API smoke test uses Node.js built-in testing capabilities
+without introducing additional dependencies.
 
 ---
 
@@ -184,7 +185,6 @@ The test runs against the active development server (`http://localhost:3000`), r
 | Feed Posts Ordering Inconsistency | **Open — Not Investigated** | **Not Investigated** | **Observed behavior:**<br>• When one account publishes three posts, their ordering appears as expected.<br>• When another account publishes a new post, the feed ordering changes unexpectedly.<br>• The newly published post may appear in an arbitrary position instead of following the expected chronological order.                       |
 | Static image connection error     | Historical finding          | Not confirmed        | `ERR_CONNECTION_REFUSED` was observed for a static image request in a separate attempt; it should not be treated as the confirmed cause of the avatar failure.                                                                                                                                                                                 |
 | Browser autocomplete warning      | Open (Minor)                | Missing HTML attr    | Chrome reported a missing `autocomplete` attribute on a password input. This is a browser warning, not a confirmed application runtime failure.                                                                                                                                                                                                |
-| npm test script not configured    | Informational               | Configuration detail | `apps/api/package.json` does not configure a `"test"` script (`npm test` returns `Missing script: "test"`). Standalone API smoke test is available at `apps/api/smoke-test.js` (`node --test apps/api/smoke-test.js`), passing 7/7 tests (7/7 PASS). Documented as an informational configuration detail, not an unresolved application issue. |
 | Dependency vulnerabilities        | Open                        | Outdated packages    | 16 known vulnerabilities in `apps/api` dependencies, including 2 critical advisories in `mongoose` and `proxy-addr`.                                                                                                                                                                                                                           |
 
 No application code or dependencies were altered to fix these issues during this baseline assessment.
