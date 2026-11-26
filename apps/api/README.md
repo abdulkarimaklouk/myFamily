@@ -71,6 +71,8 @@ apps/api/
 │   ├── like.route.js
 │   ├── post.route.js
 │   └── user.route.js
+├── scripts/
+│   └── smoke-test.js
 ├── utils/
 │   ├── appError.js
 │   ├── generateJWT.js
@@ -80,8 +82,7 @@ apps/api/
 ├── index.js
 ├── package.json
 ├── package-lock.json
-├── README.md
-└── smoke-test.js
+└── README.md
 ```
 
 > **Note:** Uploaded avatars are stored in `apps/api/uploads/` (ignored via `.gitignore`) and served from `/uploads`. Ensure `uploads/` exists before uploading avatars.
@@ -127,7 +128,7 @@ apps/api/
 
 ## Testing
 
-`apps/api` includes a zero-dependency API smoke test suite in `smoke-test.js` powered by Node.js built-in `node:test` and `node:assert/strict`.
+`apps/api` includes a lightweight API smoke test suite in `scripts/smoke-test.js` powered by Node.js built-in `node:test` and `node:assert/strict` (using `dotenv` and `mongoose` from existing dependencies for scoped test-data cleanup).
 
 With the API server running and connected to a development/test database, run:
 
@@ -135,7 +136,7 @@ With the API server running and connected to a development/test database, run:
 npm test
 ```
 
-This executes `node --test smoke-test.js` against `TEST_API_URL`, `API_URL`, or the default `http://localhost:3000`, verifying:
+This executes `node --test scripts/smoke-test.js` against `TEST_API_URL`, `API_URL`, or the default `http://localhost:3000`, verifying:
 
 1. User registration (`POST /api/auth/register`) with unique per-run credentials
 2. User login (`POST /api/auth/login`)
@@ -143,4 +144,4 @@ This executes `node --test smoke-test.js` against `TEST_API_URL`, `API_URL`, or 
 4. Feed retrieval (`GET /api/posts?limit=10&page=1`)
 5. Liking a post (`PATCH /api/like/:idPost`)
 6. Adding a comment (`POST /api/comments`)
-7. Response verification for the post, like, and comment, followed by teardown deletion of the created post (associated likes/comments cascade; the generated test user remains in the database)
+7. Response verification for the post, like, and comment, followed by an `after()` teardown hook (which runs reliably even on test failure) that deletes the created post, associated likes and comments, and the generated test user without touching pre-existing data

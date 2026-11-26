@@ -1,7 +1,7 @@
 /**
  * Minimal API Smoke Test — MyFamily (Epic E01)
  *
- * Lightweight, zero-dependency smoke test suite using Node.js built-in `node:test`
+ * Lightweight smoke test suite using Node.js built-in `node:test`
  * and `node:assert/strict` against the MyFamily REST API.
  *
  * Essential workflows covered:
@@ -11,22 +11,47 @@
  *   4. Get feed and verify created post is present
  *   5. Like the post and verify like recorded
  *   6. Add comment and verify comment recorded
- *   7. Verify response structures and clean up test post
+ *   7. Verify response structures and clean up all test-created resources
  */
 
+const path = require('node:path');
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const dotenv = require('dotenv');
+const mongoose = require('mongoose');
+
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
+const User = require('../models/user.model');
+const Post = require('../models/post.model');
+const Like = require('../models/like.model');
+const Comment = require('../models/comment.model');
 
 const BASE_URL = process.env.TEST_API_URL || process.env.API_URL || 'http://localhost:3000';
 
-describe('API Safety Net — Smoke Test Suite', 
-() => {
+/**
+ * Extract user id from a JWT payload without mutating verification state.
+ * Used as a fallback for cleanup if login fails after registration.
+ */
+function decodeJwtUserId(token) {
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return null;
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+        return payload?.id || null;
+    } catch {
+        return null;
+    }
+}
+
+describe('API Safety Net — Smoke Test Suite', () => {
     const timestamp = Date.now();
     const randomSuffix = Math.random().toString(36).substring(2, 7);
     const testUsername = `smoke_${timestamp}_${randomSuffix}`;
     const testEmail = `${testUsername}@example.com`;
     const testPassword = 'Password123!';
 
+    let registerAttempted = false;
     let authToken = null;
     let userId = null;
     let createdPostId = null;
@@ -50,6 +75,7 @@ describe('API Safety Net — Smoke Test Suite',
     });
 
     test('1. Register — User Registration with unique credentials', async () => {
+        registerAttempted = true;
         const res = await fetch(`${BASE_URL}/api/auth/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -65,6 +91,7 @@ describe('API Safety Net — Smoke Test Suite',
         assert.strictEqual(body.status, 'success', `Expected status "success", received ${body.status}`);
         assert.ok(body.data?.token, 'Response must contain auth token');
         authToken = body.data.token;
+        userId = decodeJwtUserId(authToken);
     });
 
     test('2. Login — User Authentication', async () => {
@@ -229,20 +256,74 @@ describe('API Safety Net — Smoke Test Suite',
     });
 
     after(async () => {
-        // Clean up created post and cascading likes/comments to maintain test database hygiene
+        if (!registerAttempted) {
+            return;
+        }
+
+        // First attempt API cleanup of the created post (cascades likes/comments via controller)
         if (createdPostId && authToken) {
             try {
-                const delRes = await fetch(`${BASE_URL}/api/posts/${createdPostId}`, {
+                await fetch(`${BASE_URL}/api/posts/${createdPostId}`, {
                     method: 'DELETE',
                     headers: {
                         'Authorization': `Bearer ${authToken}`
                     }
                 });
-                const delBody = await delRes.json();
-                assert.strictEqual(delBody.status, 'success', 'Cleanup delete must succeed');
-            } catch (err) {
-                console.warn(`Warning: Test cleanup failed for post ${createdPostId}: ${err.message}`);
+            } catch {
+                // Fall through to guaranteed database cleanup below
             }
+        }
+
+        const mongoUrl = process.env.MONGO_URL;
+        assert.ok(mongoUrl, 'MONGO_URL is required to clean up test user and associated test data');
+
+        await mongoose.connect(mongoUrl, { serverSelectionTimeoutMS: 10000 });
+        try {
+            const userFilter = userId
+                ? { $or: [{ _id: userId }, { email: testEmail }] }
+                : { email: testEmail };
+
+            const testUser = await User.findOne(userFilter).select('_id');
+            const targetUserId = userId || (testUser ? String(testUser._id) : null);
+
+            const postOrConditions = [{ username: testUsername }];
+            if (createdPostId) postOrConditions.push({ _id: createdPostId });
+            if (targetUserId) postOrConditions.push({ userId: targetUserId });
+            const postFilter = { $or: postOrConditions };
+
+            const testPosts = await Post.find(postFilter).select('_id');
+            const postIds = testPosts.map(p => String(p._id));
+            if (createdPostId && !postIds.includes(createdPostId)) {
+                postIds.push(createdPostId);
+            }
+
+            const commentOrConditions = [{ username: testUsername }];
+            if (postIds.length > 0) commentOrConditions.push({ postId: { $in: postIds } });
+            if (targetUserId) commentOrConditions.push({ userId: targetUserId });
+            const commentFilter = { $or: commentOrConditions };
+
+            const likeOrConditions = [{ likeUserName: testUsername }];
+            if (postIds.length > 0) likeOrConditions.push({ postId: { $in: postIds } });
+            const likeFilter = { $or: likeOrConditions };
+
+            await Comment.deleteMany(commentFilter);
+            await Like.deleteMany(likeFilter);
+            await Post.deleteMany(postFilter);
+            await User.deleteOne(userFilter);
+
+            const [remainingUser, remainingPosts, remainingComments, remainingLikes] = await Promise.all([
+                User.findOne(userFilter).select('_id'),
+                Post.countDocuments(postFilter),
+                Comment.countDocuments(commentFilter),
+                Like.countDocuments(likeFilter)
+            ]);
+
+            assert.strictEqual(remainingUser, null, 'Test user must be removed after smoke test');
+            assert.strictEqual(remainingPosts, 0, 'Test posts must be removed after smoke test');
+            assert.strictEqual(remainingComments, 0, 'Test comments must be removed after smoke test');
+            assert.strictEqual(remainingLikes, 0, 'Test likes must be removed after smoke test');
+        } finally {
+            await mongoose.disconnect();
         }
     });
 });

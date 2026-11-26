@@ -78,9 +78,9 @@ Codebase health inspection was conducted in `apps/api` (the npm package context)
 ### 3.3 API Smoke Test
 
 - **Test Script:** Configured in `apps/api/package.json`.
-- **Script Command:** `"test": "node --test smoke-test.js"`
+- **Script Command:** `"test": "node --test scripts/smoke-test.js"`
 - **Execution:** Run `npm test` from the `apps/api` directory.
-- **Test File:** `apps/api/smoke-test.js`
+- **Test File:** `apps/api/scripts/smoke-test.js`
 - **Latest Result:** 7 tests passed (7/7 PASS).
 
 The API smoke test uses Node.js built-in testing capabilities
@@ -138,22 +138,22 @@ The API duration is the browser-observed end-to-end request time. It is not an i
 
 ## 6. Minimal API Safety Net Results
 
-A lightweight, zero-dependency smoke test suite was created in `apps/api/smoke-test.js` using Node.js built-in `node:test` and `node:assert/strict`.
+A lightweight smoke test suite was created in `apps/api/scripts/smoke-test.js` using Node.js built-in `node:test` and `node:assert/strict` (with `dotenv` and `mongoose` from existing dependencies for scoped test-data teardown).
 
-The test runs against the active development server (`http://localhost:3000`), registers a unique test user per run (`smoke_<timestamp>_<random>`), creates, likes, and comments on a post, and attempts to delete the created post after verification. Note that while the test cleans up the created post (and associated likes/comments), it does not delete the registered test user.
+The test runs against the active development server (`http://localhost:3000`), registers a unique test user per run (`smoke_<timestamp>_<random>`), creates, likes, and comments on a post, and uses an `after()` hook that runs reliably even if a test fails to delete the created post, associated likes and comments, and the registered test user without touching pre-existing data.
 
 ### Test Execution Log
 
 ```text
 ▶ API Safety Net — Smoke Test Suite
-  ✔ 1. Register — User Registration with unique credentials (499.3ms)
-  ✔ 2. Login — User Authentication (209.5ms)
-  ✔ 3. Create Post — Submit new post (86.6ms)
-  ✔ 4. Get Feed — Retrieve posts and verify created post is present (77.1ms)
-  ✔ 5. Like Post — Toggle like on created post (444.1ms)
-  ✔ 6. Add Comment — Create comment on created post (226.0ms)
-  ✔ 7. Verify Post, Like, and Comment in responses (146.0ms)
-✔ API Safety Net — Smoke Test Suite (1975.3ms)
+  ✔ 1. Register — User Registration with unique credentials (813.4397ms)
+  ✔ 2. Login — User Authentication (366.5145ms)
+  ✔ 3. Create Post — Submit new post (137.7871ms)
+  ✔ 4. Get Feed — Retrieve posts and verify created post is present (300.1625ms)
+  ✔ 5. Like Post — Toggle like on created post (1541.2122ms)
+  ✔ 6. Add Comment — Create comment on created post (709.9387ms)
+  ✔ 7. Verify Post, Like, and Comment in responses (409.7046ms)
+✔ API Safety Net — Smoke Test Suite (7490.5487ms)
 ℹ tests 7
 ℹ suites 1
 ℹ pass 7
@@ -161,6 +161,7 @@ The test runs against the active development server (`http://localhost:3000`), r
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
+ℹ duration_ms 8296.1445
 ```
 
 ### Workflows Verified
@@ -172,20 +173,20 @@ The test runs against the active development server (`http://localhost:3000`), r
 5. **Like Post (`PATCH /api/like/:idPost`):** Sends like toggle; receives HTTP 200 with test username in `likesPost`.
 6. **Add Comment (`POST /api/comments`):** Submits comment referencing `postId`; receives HTTP 201 with created comment ID.
 7. **Response Verification:** Fetches post by ID and comments by post ID; validates `usernameLikes`, `lengthComments`, and comment content.
-8. **Teardown:** Deletes the created post (`DELETE /api/posts/:id`), cascading removal of associated likes and comments. The registered test user is not deleted and remains in the development database.
+8. **Teardown:** Executes reliably in `after()` even on test failure—attempts API deletion of the created post (`DELETE /api/posts/:id`) and runs scoped MongoDB cleanup to remove all test-created comments, likes, posts, and the registered test user, verifying zero remaining test records without affecting pre-existing data.
 
 ---
 
 ## 7. Observed Issues
 
-| Issue / Observation               | Status                      | Root Cause           | Evidence & Details                                                                                                                                                                                                                                                                                                                             |
-| --------------------------------- | --------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Avatar update fails               | **Resolved**                | Missing directory    | **Initial finding:** `PATCH /api/users/avatar` returned HTTP 500 during the earlier avatar-upload attempt. Destination folder `uploads` was missing.<br>**Subsequent status:** Resolved after creating the missing `uploads` directory.                                                                                                        |
-| Profile image requests fail       | **Resolved**                | Missing directory    | **Initial finding:** Requests for `/uploads/profile.png` returned HTTP 404 in the Network panel. Default avatar asset could not be served.<br>**Subsequent status:** Resolved after creating the missing `uploads` directory.                                                                                                                  |
-| Feed Posts Ordering Inconsistency | **Open — Not Investigated** | **Not Investigated** | **Observed behavior:**<br>• When one account publishes three posts, their ordering appears as expected.<br>• When another account publishes a new post, the feed ordering changes unexpectedly.<br>• The newly published post may appear in an arbitrary position instead of following the expected chronological order.                       |
-| Static image connection error     | Historical finding          | Not confirmed        | `ERR_CONNECTION_REFUSED` was observed for a static image request in a separate attempt; it should not be treated as the confirmed cause of the avatar failure.                                                                                                                                                                                 |
-| Browser autocomplete warning      | Open (Minor)                | Missing HTML attr    | Chrome reported a missing `autocomplete` attribute on a password input. This is a browser warning, not a confirmed application runtime failure.                                                                                                                                                                                                |
-| Dependency vulnerabilities        | Open                        | Outdated packages    | 16 known vulnerabilities in `apps/api` dependencies, including 2 critical advisories in `mongoose` and `proxy-addr`.                                                                                                                                                                                                                           |
+| Issue / Observation               | Status                      | Root Cause           | Evidence & Details                                                                                                                                                                                                                                                                                                       |
+| --------------------------------- | --------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Avatar update fails               | **Resolved**                | Missing directory    | **Initial finding:** `PATCH /api/users/avatar` returned HTTP 500 during the earlier avatar-upload attempt. Destination folder `uploads` was missing.<br>**Subsequent status:** Resolved after creating the missing `uploads` directory.                                                                                  |
+| Profile image requests fail       | **Resolved**                | Missing directory    | **Initial finding:** Requests for `/uploads/profile.png` returned HTTP 404 in the Network panel. Default avatar asset could not be served.<br>**Subsequent status:** Resolved after creating the missing `uploads` directory.                                                                                            |
+| Feed Posts Ordering Inconsistency | **Open — Not Investigated** | **Not Investigated** | **Observed behavior:**<br>• When one account publishes three posts, their ordering appears as expected.<br>• When another account publishes a new post, the feed ordering changes unexpectedly.<br>• The newly published post may appear in an arbitrary position instead of following the expected chronological order. |
+| Static image connection error     | Historical finding          | Not confirmed        | `ERR_CONNECTION_REFUSED` was observed for a static image request in a separate attempt; it should not be treated as the confirmed cause of the avatar failure.                                                                                                                                                           |
+| Browser autocomplete warning      | Open (Minor)                | Missing HTML attr    | Chrome reported a missing `autocomplete` attribute on a password input. This is a browser warning, not a confirmed application runtime failure.                                                                                                                                                                          |
+| Dependency vulnerabilities        | Open                        | Outdated packages    | 16 known vulnerabilities in `apps/api` dependencies, including 2 critical advisories in `mongoose` and `proxy-addr`.                                                                                                                                                                                                     |
 
 No application code or dependencies were altered to fix these issues during this baseline assessment.
 
@@ -199,6 +200,6 @@ This baseline establishes:
 
 - The verified pre-fix state of the MyFamily application for Epic E01.
 - Validated performance baselines (Frontend DOMContentLoaded: 261 ms, Load: 296 ms, Posts API: 186.92 ms).
-- A verified, repeatable zero-dependency API smoke test (`apps/api/smoke-test.js`, run via `node --test apps/api/smoke-test.js`) covering essential user operations (7/7 passed).
+- A verified, repeatable zero-dependency API smoke test (`apps/api/scripts/smoke-test.js`, run via `node --test apps/api/scripts/smoke-test.js`) covering essential user operations (7/7 passed).
 - Resolution of initial media upload/asset issues (avatar upload 500 and profile image 404 resolved after creating the missing `uploads` directory).
 - Clear documentation of active open issues (Feed Posts Ordering Inconsistency) and codebase health gaps for remediation in subsequent engineering epics.
