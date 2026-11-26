@@ -200,6 +200,6 @@ This baseline establishes:
 
 - The verified pre-fix state of the MyFamily application for Epic E01.
 - Validated performance baselines (Frontend DOMContentLoaded: 261 ms, Load: 296 ms, Posts API: 186.92 ms).
-- A verified, repeatable zero-dependency API smoke test (`apps/api/scripts/smoke-test.js`, run via `node --test apps/api/scripts/smoke-test.js`) covering essential user operations (7/7 passed).
+- A verified, repeatable smoke test suite (`apps/api/scripts/smoke-test.js`, run via `node --test apps/api/scripts/smoke-test.js`) covering essential user operations (7/7 passed), with no additional dependencies introduced.
 - Resolution of initial media upload/asset issues (avatar upload 500 and profile image 404 resolved after creating the missing `uploads` directory).
 - Clear documentation of active open issues (Feed Posts Ordering Inconsistency) and codebase health gaps for remediation in subsequent engineering epics.
