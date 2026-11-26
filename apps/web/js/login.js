@@ -218,12 +218,12 @@ function selectAvatar(body) {
                 }).then(res => res.json())
                     .then((res) => {
                         if (res.status === "success") {
-                            location.href = "http://127.0.0.1:5500/myFamily.html";
+                            location.href = "http://127.0.0.1:5500/apps/web/myFamily.html";
                         }
                     })
             }
         } else if (event.target.id === "skip-btn") {
-            location.href = "http://127.0.0.1:5500/myFamily.html";
+            location.href = "http://127.0.0.1:5500/apps/web/myFamily.html";
         }
     });
 }
